@@ -1,0 +1,242 @@
+---
+title: "Analisis Exploratio: Cancer de mama"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## ANÁLISIS DE EXPLORACIÓN DE DATOS: Mortalidad de cáncer de mama
+
+En el siguiente texto vamos a realizar un análisis de exploración de datos sobre cáncer de mama en la provincia de Neuquén. El objetivo es analizar la distribución temporo-espacial de la mortalidad por cáncer de mama en la provincia de Neuquen (Argentina) en el periodo 2009 - 2019, e identificar sus principales determinantes en el contexto de las transiciones demográficas y sanitarias.
+
+**1) Descargamos algunas librerías necesarias para realizar el análisis.**
+
+```{r}
+library(readxl) #leer los datos desde Excel
+library(dplyr)  #Manipular datos
+library(tidyverse) #
+library(corrplot)  #
+library(ggplot2)   #gráficos
+library(tidyr)    #limpieza 
+library(summarytools)
+```
+
+**2) Importamos y exploramos la base de datos:**
+
+```{r}
+
+datos <- read_excel("BASE 1.xlsx")
+
+```
+
+**3) Limpiamos la base para luego no tener problemas al trabajar en ella:**
+
+```{r}
+# 2. Limpiar nombres de columnas (elimina espacios extra en " G")
+datos <- datos %>% 
+  rename_with(trimws) %>% 
+  mutate(
+    ZS = as.factor(ZS),
+    AP = as.factor(AP),
+    Año = as.integer(Año)
+  )
+
+```
+
+**4) Visualizamos los datos:**
+
+```{r}
+# 3. Vista rápida de la estructura
+glimpse(datos)
+```
+
+**Reconocemos la base de datos**
+
+```{r}
+dim(datos)  #dimension de la base de datos
+names(datos) #nombre de las variables
+
+```
+
+- **TME**: Tasa estandarizada de mortalidad por cáncer de mama (por 100.000 mujeres)
+
+- **IE**: Índice de envejecimiento de la población
+
+- **IDE**: Índice de dependencia económica
+
+- **TN**: Tasa de natalidad
+
+- **M**: Densidad de médicas/os
+
+- **E**: Densidad de enfermeras/os
+
+- **O**: Porcentaje de camas ocupadas
+
+- **G**: Porcentaje de atención por guardia
+
+- **C**: Consultas recibidas por habitante
+
+**Veamos las primeras observaciones:**
+
+```{r}
+str(datos) 
+head(datos)
+```
+
+**5) Resumen estadístico**
+
+```{r}
+summary(datos)
+```
+
+**6) Exploración visual:**
+
+- **Matriz de correlación**
+
+```{r}
+#| label: fig-correlacion
+#| fig-cap: "Matriz de Correlaciones de Pearson"
+
+matriz_corr <- datos %>% 
+  select(TME, IE, IDE, TN, M, E, O, G, C) %>% 
+  cor(use = "complete.obs")
+
+corrplot(matriz_corr, method = "color", type = "upper", 
+         addCoef.col = "black", number.cex = 0.7,
+         tl.col = "black", tl.srt = 45,
+         col = colorRampPalette(c("#4575b4", "#ffffbf", "#d73027"))(200))
+```
+
+*Conclusión: Podemos visualizar que TME se correlaciona positivamente de forma débil con: IDE y G. Con O y E la correlación es cero y con IE, TN, M y C la correlación es negativa y débil.*
+
+- **Variación territorial por Zona Sanitaria**
+
+```{r}
+#| label: fig-zonas
+#| fig-cap: "Distribución de la TME según Zona Sanitaria"
+
+ggplot(datos, aes(x = ZS, y = TME, fill = ZS)) +
+  geom_boxplot(alpha = 0.8, show.legend = FALSE) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "TME por Zona Sanitaria (ZS)",
+       x = "Zona Sanitaria",
+       y = "TME (por 100.000 mujeres)") +
+  theme_minimal()
+
+```
+
+Conclusión:
+
+- **Gráfico temporal:**
+
+```{r}
+# Promedio de TME por año
+datos %>%
+  group_by(Año) %>%
+  summarise(TME_prom = mean(TME, na.rm = TRUE)) %>%
+  ggplot(aes(x=Año, y=TME_prom)) +
+  geom_line(color="red") +
+  geom_point() +
+  labs(title="TME promedio por año en Neuquén")
+```
+
+Este gráfico, muestra la tendencia provincial de la mortalidad.
+
+*Conclusión: Se visualizan valores bajos entre 2010 - 2012, luego hay un salto en 2013, oscilaciones en 2014-2016 con un pico en 2015.*
+
+- **Test de Correlación para visualizar si la mortalidad se asocia con envejecimiento, natalidad o recursos sanitarios:**
+
+```{r}
+# Correlaciones simples
+cor.test(datos$TME, datos$IE)   # envejecimiento
+cor.test(datos$TME, datos$M)    # médicos
+cor.test(datos$TME, datos$TN)   # natalidad
+
+```
+
+*Conclusión: Como p-value es mayor a 0,05, podemos concluir que no hay una correlación significativa.*
+
+- **Gráfico sobre TME por año en casa ZS:**
+
+```{r}
+# Promedio de TME por zona y año
+datos_prom <- datos %>%
+  group_by(ZS, Año) %>%
+  summarise(TME_prom = mean(TME, na.rm = TRUE))
+
+# Gráfico facetado: 6 gráficos chiquitos, uno por zona
+ggplot(datos_prom, aes(x=Año, y=TME_prom, group=ZS)) +
+  geom_line(color="red") +
+  geom_point() +
+  facet_wrap(~ZS, ncol=3) +
+  labs(title="TME promedio por año en cada Zona Sanitaria",
+       x="Año", y="TME promedio")
+```
+
+**La zona que tiene mayor oscilaciones en cuanto a TME es II, III y V.**
+
+**Recordar que:**
+
+**Zona I:** Centenario, Senillosa, SPCH
+
+**Zona II:** Zapala, Aluminé, Bajada del Agrio, El Huecu, Las Lajas, Loncopue, Mariano Moreno.
+
+**Zona III:** Chos Malal, Andacollo, Buta Ranquil, El Cholar, Las Ovejas y Tricao Malal.
+
+**Zona IV:** SMA, Junin de los Andes, Las coloradas y Villa La Angostura.
+
+**Zona V:** Cutral Co Plaza Huincul, Añelo, El Chocon, Picun Leufú, Piedra del Aguila y Rincon de los Sauces.
+
+**Zona VI:** Neuquén y Plottier.
+
+```{r}
+#Tabla de datos sobre Independencia económica respecto a las zonas 
+datos %>%
+  group_by(ZS) %>%
+  summarise(media_IDE = mean(IDE, na.rm=TRUE),
+            mediana_IDE = median(IDE, na.rm=TRUE),
+            sd_IDE = sd(IDE, na.rm=TRUE))
+```
+
+```{r}
+#Boxplot sobre independencia económica con respecto a Zonas 
+ggplot(datos, aes(x=ZS, y=IDE)) +
+  geom_boxplot(fill="lightgreen") +
+  labs(title="Distribución del Índice de Independencia Económica por Zona Sanitaria",
+       x="Zona Sanitaria", y="IDE")
+```
+
+```{r}
+datos %>%
+  group_by(ZS, Año) %>%
+  summarise(media_IDE = mean(IDE, na.rm=TRUE)) %>%
+  ggplot(aes(x=Año, y=media_IDE, color=ZS)) +
+  geom_line() +
+  geom_point() +
+  labs(title="Evolución del IDE promedio por Zona Sanitaria",
+       x="Año", y="IDE promedio")
+
+```
+
+```{r}
+ggplot(datos, aes(x=IDE, y=TME, color=ZS)) +
+  geom_point(alpha=0.7) +
+  geom_smooth(method="lm", se=FALSE) +
+  labs(title="Relación entre Independencia Económica (IDE) y Mortalidad (TME) por Zona Sanitaria",
+       x="Índice de Independencia Económica (IDE)",
+       y="Tasa de Mortalidad Específica (TME)")
+
+```
+
+```{r}
+ggplot(datos, aes(x=IDE, y=TME)) +
+  geom_point(alpha=0.7, color="darkblue") +
+  geom_smooth(method="lm", se=FALSE, color="red") +
+  facet_wrap(~ZS, ncol=3) +
+  labs(title="Relación IDE–TME por Zona Sanitaria",
+       x="Índice de Independencia Económica (IDE)",
+       y="Tasa de Mortalidad Específica (TME)")
+```
